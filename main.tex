@@ -1,0 +1,321 @@
+% Template rapport
+% CASSAYRE Valentin
+
+\documentclass[a4paper, 11pt]{article} % article
+\usepackage[top=3cm, bottom=3cm, left = 2cm, right = 2cm]{geometry} % marges
+\geometry{a4paper} % format de la page
+\usepackage{ae,lmodern} % police vectorielle
+\usepackage[utf8]{inputenc} % encodage du document brut
+\usepackage[T1]{fontenc} % encodage d'export
+\usepackage{textcomp} % symboles
+\usepackage{amsmath,amsthm,amssymb,amsfonts} % polices mathématiques
+\usepackage{bm}  
+\usepackage[pdftex,bookmarks,colorlinks,breaklinks]{hyperref}  
+\hypersetup{linkcolor=black,citecolor=black,filecolor=black,urlcolor=black} % liens en noir
+\usepackage{memhfixc} 
+\usepackage{pdfsync}  
+\usepackage{fancyhdr}
+\usepackage[round]{natbib}
+\usepackage{color}
+\usepackage{iftex}
+\usepackage{xcolor}
+\pagestyle{fancy}
+\usepackage[french]{babel} % langue
+
+% Images
+\usepackage{graphicx} % image
+\graphicspath{ {./images/} } % chemin des images
+\usepackage{pgfplots} % images pgf (matplotlib ou matlab)
+\usepackage{tikz}
+\usepackage[european resistor, european voltage, european current]{circuitikz}
+\usetikzlibrary{arrows,shapes,positioning}
+\usetikzlibrary{decorations.markings,decorations.pathmorphing,
+decorations.pathreplacing}
+\usetikzlibrary{calc,patterns,shapes.geometric}
+% Physique
+\usepackage[squaren,Gray]{SIunits} % unités de physique
+% Informatique
+\usepackage{minted} % insérer du code général
+\usepackage{pythonhighlight} % insérer du code python
+\usepackage{pgf} % charger des plots matplotlib en pgf
+
+\title{
+Pointé automatique du temps d'arrivé des ondes P et S \\
+\large Rapport terminal de projet informatique \\
+1A EOST \\
+}
+
+\author{Bastien PITOISET et Valentin CASSAYRE}
+%\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\newpage
+
+\section{Introduction}
+
+La libération d'énergie lors d'un séisme génère des ondes qui vont se propager différemment selon leurs caractéristiques. Les ondes de surfaces transmettent la plus grande partie de l'énergie relâchée, mais ne se propagent qu'à la surface de la Terre. Les ondes de volume, plus rapides, se propagent à l'intérieur de la Terre. Des ondes de volume, nous pouvons distinguer les ondes de compression, les ondes P, des ondes de cisaillement, les ondes S. Les ondes P sont les ondes les plus rapides avec une vitesse de propagation de $6 \kilo\meter\per\second$ près de la surface de la Terre.
+
+L'ensemble de ces champs d'ondes peuvent être mesurées au niveau de capteurs sismiques, par exemple dans une station de surveillance sismique. Ces stations enregistrent en continu les déplacement du sol et ces mesurent permettent de détecter d'éventuels séismes à la suite d'analyses. Et la détermination du temps d'arrivée des différentes ondes est une étape essentiel dans l'analyse de ces signaux. Le temps d'arrivée d'une onde correspond au début de sa phase, période pendant laquelle l'onde est enregistrée. Cette identification est très importante dans divers domaines, il permet par exemple de localiser le foyer ou de récolter des données sur la structure intérieure de la Terre.
+
+L'objet de ce projet est donc de réaliser un programme permettant de détecter un séisme puis de pointer automatiquement le début des phases P et S. 
+
+Il existe trois grandes familles d’algorithmes de détection et de pointage automatique [d'après \cite{probatoire}] :
+\begin{itemize}
+  \item Les algorithmes de détection par calcul de l’énergie comparent chaque valeur avec la moyenne des valeurs qui la précèdent. 
+  \item Les algorithmes basés sur des méthodes autorégressives recherchent les modélisations du bruit et du signal sismique. 
+  \item Les algorithmes utilisant des réseaux de neurones artificiels, après une phase d’apprentissage, sont capables de détecter les différentes ondes sismiques. 
+\end{itemize}
+
+Pour ce projet nous avons choisi de travailler avec les algorithmes de détection par calcul de l’énergie. Ce sont historiquement ces algorithmes qui ont été utilisés en premier dans les années 80. Ils présentent l'avantage d'être les plus simples et de pouvoir à la fois détecter un potentiel séisme et de pointer le début des phases sismiques. 
+
+Ces algorithmes sont basée sur un signal d'entrée qui peut-être corrigé ou modifié et calculent une fonction caractéristique de ce signal. Cette fonction qui caractérise le signal peut ensuite être utilisée pour détecter un potentiel séisme et pour pointer ses différentes phases.
+
+\section{Acquisition des données}
+
+Nous avons choisi de travailler essentiellement avec le langage Python, un langage haut niveau qui présente de nombreux modules notamment dans le domaine de la sismologie. Nous nous sommes basés sur des enregistrements de séismes locaux autour de Strasbourg par des stations à proximité. Les données sont celles du RéSiF et ont été chargées avec le module \cite{obspy}. Un traitement de base a été effectué au préalable consistant en un filtre passe bande entre les fréquences de 2 \hertz  et 10 \hertz. Le signal obtenu est ensuite stocké dans deux arrays Numpy, le temps dans $times$ et l'amplitude correspondante dans $data$ et le module \cite{obspy} n'est plus utilisé dans la suite, l'intérêt étant de présenter ces algorithmes.
+
+\section{Fonction caractéristique}
+
+La famille d'algorithme étudiée ici consiste en une analyse de l'énergie des champs d'onde incidents et de son évolution au cours du temps. \cite{allen1978} a introduit le concept de fonction caractéristique, qui caractérise un signal. Elle est obtenue par une ou plusieurs transformations non linéaires du sismogramme et doit augmenter brusquement au moment de l'arrivée d'un champ d'onde sismique. Elle se base sur un signal qui peut-être modifié ou corrigé. Dans notre cas, nous avons déjà corrigé le signal notamment en le filtrant. La modification du signal s'effectue par des transformations non linéaires. En général les signaux modifiés sont positifs et sont donc appelés enveloppe par abus de langage. 
+
+\subsection{Modification du signal}
+
+\subsubsection{Transformées simples}
+
+\cite{vanderkulk1965} introduit l'utilisation de la valeur absolue du signal comme enveloppe. Cette approximation permettait de faire des économies de calcul significatives par rapport au carré des valeurs des amplitudes. Mais l'augmentation de la puissance de calculs a permis de retirer cette barrière. \cite{allen1978} généralise l'utilisation du carré des valeurs des amplitudes pour calculer la fonction caractéristique. Ces deux transformations correspondent aux transformations non linéaires les plus simples permettant d'aboutir à un signal positif, mais ne prennent pas en compte les valeurs voisines et donc les variations.
+
+\subsubsection{Enveloppe de Stewart}
+
+\begin{figure}[!ht]
+    \centering
+    \scalebox{.9}{\input{images/envelope_stewart.pgf}}
+    \caption{Comparaison de l'enveloppe de Stewart (bleu) au signal d'entrée (gris).}
+    \label{fig:env-stewart}
+\end{figure}
+
+\cite{stewart1977} a utilisé une enveloppe modifiée $mdx$ basée sur la dérivée des données mettant en évidence les changements de pente. La valeur de $mdx$ est calculée à partir d'une estimation de la dérivée $dx$ en chaque point [d'après \cite{wither1998}] :
+\begin{equation}
+   dx_i=x_i-x_{i-1}
+\end{equation}
+Si le signe de $dx$ a été constant pour moins de 8 valeurs consécutives, alors 
+\begin{equation}
+   mdx_i = mdx_i + dx_i
+\end{equation}
+Sinon,
+\begin{equation}
+   mdx_i = dx_i
+\end{equation}
+
+Cette transformation permet de mettre en avant les variations . Il agit en quelque sorte comme un filtre passe haut, et est particulièrement utile pour des signaux bruts, donc l'intérêt est limité étant donné que notre signal a déjà été filtré.
+
+\subsubsection{Enveloppe supérieure et approximation géométrique}
+
+\begin{figure}[!ht]
+    \centering
+    \scalebox{1}{\input{images/envelope_hilbert-geom.pgf}}
+    \caption{Comparaison de l'enveloppe du signal (gris) obtenue à partir d'une transformée de Hilbert (vert) ou d'une méthode géométrique (rouge). La valeur absolue (noir pointillé) permet de distinguer la nuance avec l'enveloppe.}
+    \label{fig:env-approx}
+\end{figure}
+
+D'autres auteurs utilisent l'enveloppe classique appelée enveloppe supérieure, une courbe lisse qui décrit les amplitudes extrêmes du signal. Elle est définie par rapport à la transformation de Hilbert. Mais elle peut être approximée par des méthodes géométriques, par exemple en gardant la valeur absolue d'extremums locaux du signal. 
+
+En ne gardant que les points correspondant aux extremums locaux du signal initial et sans faire d'interpolation, nous réduisons grandement le nombre de points. Une autre conséquence est que les points ne sont plus espacés linéairement ce qui rajoute de la complexité et une source d'erreur pour la suite des algorithmes.
+
+\subsubsection{Enveloppe de Allen}
+
+\cite{allen1982} définit une nouvelle enveloppe [d'après \cite{kuperkoch2010}]
+\begin{equation}
+   E_i^2 = x_i^2 + C_i \times (x_i^2-x_{i-1}^2)
+\end{equation}
+avec $C_i$ un coefficient tel que
+\begin{equation}
+   C_i = \frac{\sum_{j=1}^{i}{|x_j|}}{\sum_{j=1}^{i}{|x_j-x_{j-1}|}}
+\end{equation}
+
+Cette enveloppe approxime l'enveloppe supérieure sans pour autant réduire le nombre de points ni même d'avoir à réaliser une transformée de Hilbert (figure \ref{fig:env-comp}).
+
+\subsubsection{Enveloppe de Baer et Kradolfer}
+
+\cite{baer1987} proposent une amélioration de l'enveloppe d'Allen définit ainsi (figure \ref{fig:env-comp}) [d'après \cite{kuperkoch2010}]
+\begin{equation}
+   E_i^2 = x_i^2 + C_i \times (\dot{x_i}^2)
+\end{equation}
+avec $C_i$ un coefficient tel que
+\begin{equation}
+   C_i = \frac{\sum_{j=1}^{i}{x_j^2}}{\sum_{j=1}^{i}{\dot{x_j}^2}}
+\end{equation}
+
+\begin{figure}[ht]
+    \centering
+    \scalebox{1}{\input{images/envelope_allen-baer.pgf}}
+    \caption{Comparaison de différentes enveloppes calculées à partir du même signal (gris). La valeur absolue (noir pointillé), l'enveloppe supérieure (bleu), l'approximation géométrique de l'enveloppe supérieure (rouge), l'enveloppe de Allen (violet) et de l'enveloppe de Baer et Kradolfer (vert).}
+    \label{fig:env-comp}
+\end{figure}
+
+\subsection{Calcul de fonctions caractéristiques}
+
+\subsubsection{Méthode STA/LTA}
+
+\begin{figure}[!ht]
+    \centering
+    \scalebox{.9}{\input{images/stalta_classic-recursiv.pgf}}
+    \caption{Comparaison de la fonction caractéristique STA/LTA obtenue par méthode classique (vert) et récursive (bleu) en utilisant des largeurs de fenêtres de $2$ et $10 \second$.}
+    \label{fig:stalta}
+\end{figure}
+
+Une grande partie des algorithmes de calcul de fonction caractéristique se basent sur la méthode appelée STA/LTA. Cette méthode consiste à comparer la moyenne à court terme (STA = Short Term Average) avec la moyenne à long terme (LTA = Long Term Average). 
+À court terme, nous mesurons en quelque sorte l'amplitude instantanée du signal. À long terme, nous mesurons plutôt l'amplitude locale du bruit de fond. Le rapport entre les deux permet de comparer ces deux grandeurs. Nous constatons que la fonction obtenue caractérise bien le signal puisqu'on observe 2 pics correspondant au début de la phase P et de la phase S, figure \ref{fig:stalta}.
+Cet algorithme se base donc sur deux paramètres qui sont la longueur des fenêtres STA et LTA, respectivement $nsta$ et $nlta$. Dans la littérature nous trouvons généralement que la longueur de la fenêtre de LTA est 20 à 100 fois plus grande que la longueur de la fenêtre STA [d'après \cite{kuperkoch2010}, \cite{vassallo2012}, \cite{phasenet2018}].
+Le principal défaut de cet algorithme c'est qu'il est coûteux en calcul en raison des nombreuses moyennes mobiles. Ce coût se fait particulièrement ressentir en utilisant un langage de haut niveau, ici Python. Si nous considérons un signal de $n$ points, auquel nous voulons calculer des moyennes glissantes de largeur $n_f$, il faudrait réaliser $n-n_f-1$ somme de $n_f$ éléments soit un total de $(n-n_f-1) \times n_f$ opérations d'addition puis $n-n_f-1$ opérations de divisions pour calculer les moyennes glissantes en chaque point. Une solution qui permet de limiter ce nombre consiste à calculer les moyennes mobiles à partir de la somme cumulée des valeurs des amplitudes du signal. En effet en utilisant une somme cumulée, nous devons réaliser $n-1$ opérations d'addition pour calculer la somme cumulée puis seulement $n-n_f-1$ opérations d'addition pour calculer les sommes spécifiques à chaque point, pour enfin calculer la moyenne en divisant $n-n_f-1$ fois. La méthode classique utilise donc pour un grand nombre d'opérations environ $n \times n_f$ opérations d'addition contre seulement $2 \times n_f$ opérations d'additions en utilisant les sommes cumulées. Nous avons $2 \times n_f > n \times n_f$ pour $n_f > 2$, qui est toujours atteint. L'implémentation du calcul des moyennes glissantes d'un signal $data$ à partir d'une somme cummulée peut se faire efficacement en utilisant le module Numpy :
+
+\begin{minted}{python}
+import numpy as np
+
+cumsum_data = np.cumsum(data)
+
+moyennes[nf:] = (cumsum_data[nf] - cumsum_data[:-nf])/nf
+\end{minted}
+
+\subsubsection{Algorithme d'Allen}
+
+\cite{allen1982} propose un nouvel algorithme qui approxime l'algorithme STA/LTA trop coûteux en calculs, en calculant les coefficients STA et LTA par la relation de récurrence [d'après \cite{probatoire}, \cite{khalaf2016}, \cite{lumban2021}]:
+\begin{equation}
+   STA_i = STA_{i-1} + \frac{1}{nsta}(E_i^2 - STA_{i-1})
+\end{equation}
+\begin{equation}
+   LTA_i = LTA_{i-1} + \frac{1}{nlta}(E_i^2 - LTA_{i-1})
+\end{equation}
+avec $E_i^2$ le signal d'entrée, $nsta$ et $nlta$ les largeurs des intervalles STA et LTA. 
+
+Cette approximation astucieuse permet de réduire le nombre de calculs à également $2 \times n_f$ opérations d'addition pour chaque moyenne mobile. Même si elle a comme limite qu'elle caractérise moins le signal d'entrée, le pic est légèrement moins marqué lors de l'arrivée du champ d'ondes et elle bruite la fonction caractéristique, il y a plusieurs pics au niveau du maximum global, figure \ref{fig:stalta}.
+
+Nous avons jusqu'à présent traduit ces algorithmes en Python, un langage haut niveau, pour des raisons d'aisance et de simplicité. Mais pour augmenter d'avantage l'efficacité de calcul de notre programme, nous pouvons le traduire dans un langage plus bas niveau. Nous avons choisi le langage C, qui présente une bonne compatibilité avec Python.
+
+\begin{minted}{c}
+#include <stdlib.h>
+
+float *stalta_recursiv(float *data, int nsta, int nlta, int N)
+{
+    float *fc = malloc((sizeof(float) * N));
+    float sta, lta;
+    sta = 0;
+    lta = 0;
+    
+    int i;
+    for (i = 0; i < N; i++)
+    {
+        sta = (*(data + i) - sta) / nsta + sta;
+        lta = (*(data + i) - lta) / nlta + lta;
+        if (i > nlta && lta != 0)
+            *(fc + i) = sta / lta;
+        else
+            *(fc + i) = 0;
+    }
+
+    return fc;
+}
+\end{minted}
+
+Pour réaliser la passerelle entre Python et C, nous utilisons le module $ctypes$. Le code C doit d'abord être compilé
+\begin{minted}{bash}
+gcc -c -Wall -Werror -fPIC `python-config --cflags` stalta.c
+gcc -shared -o stalta.so stalta.o `python-config --ldflags`
+\end{minted}
+Puis il peut être chargé en Python
+\begin{minted}{python}
+import ctypes
+
+stalta_c = ctypes.CDLL('./stalta.so')
+
+stalta_c.stalta_recursiv.argtype = (ctypes.POINTER(ctypes.c_float * n), 
+    ctypes.c_int, ctypes.c_int, ctypes.c_int)
+stalta_c.stalta_recursiv.restype = ctypes.POINTER(ctypes.c_float * n)
+
+fc_allen_recursiv_ptr = stalta_c.stalta_recursiv((ctypes.c_float * n)(*sqa_data), 
+    nsta, nlta, n) # exécution de la fonction
+fc_allen_recursiv = fc_allen_recursiv_ptr.contents
+\end{minted}
+
+En comparant les temps d'exécution d'un signal de 36000 points avec des fenêtres de 200 et 4000 points, nous obtenons $0.07 \second$ en Python, poussé à $0.06 \second$ en utilisant une array Numpy, contre $0.01 \second$ en C. Pour donner un ordre de comparaison, l'algorithme STA/LTA classique écrit entièrement en Python a un temps d'exécution de plusieurs secondes (sans l'utilisation de Numpy). Nous avons ainsi résolu les problèmes de la puissance de calcul engendré par cet algorithme.
+
+\subsubsection{Z-détecteur et algorithme de Baer et Kradolfer}
+
+Swindell et Snell (1977) proposent le Z-détecteur, une méthode de calcul basé sur une unique fenêtre contrairement à la méthode STA/LTA. Cette fonction caractéristique estime l’écart des données sismiques à la valeur-moyenne, exprimée en unité de son écart-type [d'après \cite{wither1998}, \cite{probatoire}, \cite{kuperkoch2010}]
+\begin{equation}
+   Z_i = \frac{STA_i-\mu}{\sigma}
+\end{equation}
+avec $STA_i$ la moyenne glissante de la fenêtre, $\mu$ la moyenne et $\sigma$ l'écart-type des moyennes des fenêtres STA.
+
+\begin{figure}[!ht]
+    \centering
+    \input{images/fc-z.pgf}
+    \caption{Comparaison de la fonction caractéristique de Swindell et Snell avec celle de Baer et Kradolfer}
+    \label{fig:fc-z}
+\end{figure}
+
+\cite{baer1987} introduisent une variante 
+\begin{equation}
+   FC_i = \frac{E_i^4-\bar{E_i^4}}{\sigma(E_i^4)}
+\end{equation}
+avec $\bar{E_i^4}$ la moyenne de $E^4$ sur l'intervalle de la fenêtre choisie et $\sigma(E_i^4)$ l'écart-type de $E^4$ sur l'intervalle de la fenêtre choisie.
+Cette autre fonction caractéristique présentent des pics très marqués lors du début des phases P et S, mais présentent beaucoup de bruit, qui pourraient être liés à la fenêtre choisie trop petite. 
+
+\section{Détection et pointage}
+
+\begin{figure}[ht]
+    \centering
+    \scalebox{.9}{\input{images/pointage-strasbourg.pgf}}
+    \caption{Visualisation de la détection et du pointage du séisme induit de Strasbourg du 26 juin 2021 de magnitude 4. Le signal d'entrée (gris) correspond à l'enregistrement de la vitesse de déplacement du sol au niveau de la station permanente d'Illfurth (ILLF) traité. Les fonctions caractéristiques de ce signal (bleu) sont représentés avec leurs seuils respectifs (vert pointillé).}
+    \label{fig:pointage-strasbourg}
+\end{figure}
+
+\subsection{Détection}
+
+Contrairement au calcul de fonctions caractéristiques vu précédemment, la détection d'un éventuel séisme implique l'introduction de différents paramètres qui dépendent de la nature et la localisation du séisme. Par exemple, nous pouvons considérer un premier seuil qui permet de déclencher des opérations de vérification. Mais ensuite il faut vérifier que le seuil est dépassé pendant une certaine durée. De la même façon nous pouvons introduire de nombreux paramètres.
+
+Ces paramètres se déduisent de la littérature mais varient beaucoup d'une publication à une autre. Ils sont ajustées à partir de données de pointages manuels sur les échantillons de séismes qu'on cherche à étudier. Ces ajustements s'éloignant du "projet informatique" nous avons limité le nombre de paramètres. Le Z-détecteur présente l'avantage de s'adapter automatiquement à la variance du bruit fond [d'après \cite{wither1998}]. Ainsi les paramètres de détection varient peu et cette fonction caractéristique est intéressante à utiliser pour la détection de séismes plus que pour le pointage, même si les autres fonctions caractéristiques auraient également pu être utilisées pour jouer ce rôle de détection.
+
+Notre algorithme se base d'abord sur la détection du séisme en vérifiant que le seuil est dépassé pendant une certaine période. Si c'est le cas, nous pouvons considérer qu'il y a un séisme et l'algorithme va sélectionner un intervalle en se basant sur un deuxième seuil plus faible et en élargissant cet intervalle. En sortie nous avons l'intervalle de temps correspondant à la secousse à partir duquel nous pourrons pointer le début des phases sismiques en se basant sur d'autres fonctions caractéristiques.
+
+\subsection{Pointage}
+
+Le pointage est dépendant de la détection, il a lieu que si un séisme est détecté et prend en compte l'intervalle de temps supposé correspondre à la secousse. Nous gardons tous les intervalles où le seuil d'amplitude est dépassé par une nouvelle fonction caractéristique et qui correspondent à l'intervalle supposé de la secousse précédent. Pour chacun de ces nouveaux intervalles, nous calculons le maximum local d'amplitude de l'intervalle et le début de l'intervalle. Nous trions les intervalles par ordre décroissante par rapport à leur maximum, pour ensuite ne garder que les temps de début d'intervalles. Nous obtenons ainsi plusieurs temps de pointages, normalement deux, correspondant à l'arrivée des ondes P puis S.
+
+\begin{figure}[!ht]
+    \centering
+    \scalebox{.9}{\input{images/pointage-turquie.pgf}}
+    \caption{detect}
+    \label{fig:pointage-turquie}
+\end{figure}
+
+\section{Conclusion et discussion}
+
+L'objectif de détection d'un séisme et de pointage des ondes P et S de façon automatique a été atteint dans une certaine mesure. Nous constatons que cette méthode fonctionne particulièrement bien pour les séismes régionaux comme le montre la figure \ref{fig:pointage-strasbourg}, un séisme de magnitude 4 à de 100 km de la station. La détection permet d'isoler un intervalle relativement précis de la période de secousse. Le pointage est cohérent pour diverses fonctions caractéristiques, il y a des écarts de l'ordre de la centaine voir de la dizaine de millisecondes. Néanmoins nous constatons que la fonction caractéristique de \cite{baer1987} ne permet pas de pointer le début de la phase S, alors que le pic est très marqué pour le début de la phase P. Nous avons également essayé d'implémenter d'autres fonctions caractéristiques comme celle de Carl, sans succès, du fait du nombre important de paramètres. La méthode classique STA/LTA s'avère particulièrement efficace, et sa variante récursive montre des résultats similaires.
+
+Mais cette méthode n'est plus aussi efficace pour des séismes lointains. En effet, nous voyons sur la figure \ref{fig:pointage-turquie} que le pointage n'est plus aussi précis pour un séisme de magnitude 8 à plus de 3000 km de la station sismique. Cette baisse de précision s'explique naturellement par la plus faible amplitude du signal, il est plus bruité. Le signal bruité obstrue donc les variations d'amplitudes liées aux débuts des phases, en particulier celles de la phases S dont le pointage semble être décalée avec plusieurs secondes de retard. 
+
+Cependant, des ajustements peuvent être réalisés pour augmenter la précision de pointage. En effet, nous avons introduit un grand nombre de paramètres qui dépendent de la nature des séismes. Parmi ces paramètres, nous pouvons citer les largeurs des fenêtres STA et LTA, les seuils de détection et de pointage, et la durée minimale de détection. Nous pouvons également rappeler que les fonctions caractéristiques sont calculées à partir d'un signal modifié appelé enveloppe, et le choix de cette enveloppe constitue également un paramètre important. 
+
+\section{Code source}
+
+\subsection{Exemple}
+
+\inputminted[fontsize=\small,linenos]{python}{./code/sample.py}
+
+\subsection{Code Python}
+
+\inputminted[fontsize=\footnotesize,linenos]{python}{./code/picker.py}
+
+\subsection{Code C}
+
+\inputminted[fontsize=\footnotesize,linenos]{c}{./code/stalta.c}
+
+\newpage 
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
